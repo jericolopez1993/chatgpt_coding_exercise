@@ -1,0 +1,160 @@
+{% extends 'story/base.html' %}
+{% block title %} Home {% endblock %}
+{% block content %}
+<div class="row justify-content-center my-4">
+    <div class="col-md-7 mt-4">
+        <div class="row justify-content-start">
+          <p>
+            <span>Github Repository:</span>
+            <a href="https://github.com/jericolopez1993/chatgpt_coding_exercise" target="_blank"> chatgpt_coding_exercise </a>
+          </p>
+        </div>
+        <div class="card">
+            <h1 class="card-header text-center">A.I Story</h1>
+            <div class="card-body">
+              <div class="d-flex justify-content-end">
+                <button type="button" class="btn btn-primary mb-3" onclick="location.href='{% url 'new_story' %}'">New Story +</button>
+              </div>
+              <div id="chat-history" class="chat-history mb-3">
+                {% for message in messages %}
+                  <div class="card mb-2 {% if message.role == 'assistant' %}bg-success text-white{% endif %}">
+                    <div class="card-body p-2">
+                      <strong>{{ message.role|title }}:</strong> {{ message.content|linebreaksbr }}
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+              <form action="." method="POST" id="story-form">
+                <!-- this secures the form from malicious attacks during submission -->
+                {% csrf_token %}
+                <label for="topic_field" class="form-label">Story Topic:</label>
+                <input class="form-control mb-2" required type="text" autofocus="autofocus" name="topic" value="{{ topic }}" id="topic_field">
+                <label for="style_field" class="form-label">Story Style:</label>
+                <select class="form-control mb-2" name="selected-style" id="style_field">
+                    <option value=""></option>
+                    {% for style in styles %}
+                        <option value="{{ style }}">{{ style }}</option>
+                    {% endfor %}
+                </select>
+                <button class="btn btn-success fw-bold" type="submit" id="btn-generate-prompt">
+                     GENERATE <i class="generate_icon fa-solid fa-arrow-right"></i>
+                </button>
+              </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block javascript %}
+
+<script>
+    $("#story-form").submit(function (e) {
+        // preventing from page reload and default actions
+        e.preventDefault();
+        // serialize the data for sending the form data.
+        let serializedData = $(this).serialize();
+        let topic = $("#topic_field").val();
+        let style = $("#style_field").find(":selected").val();
+        // make POST ajax call
+        $.ajax({
+            type: 'POST',
+            url: "{% url 'request_prompt' %}",
+            data: serializedData,
+            beforeSend: function () {
+              disableGenerateBtn();
+
+              let prompt = "write a story under 500 words about " + topic
+              if (style != "") {
+                prompt += " in the style of " + style
+              }
+
+              append_to_message_container('user', prompt);
+            },
+            success: function (response) {
+                // on successfull creating object
+                // 1. clear the form.
+                $("#story-form").trigger('reset');
+                // 2. focus to topic input
+                $("#topic").focus();
+                // display the newly friend to table.
+                let messages = response["messages"];
+                if (messages.length > 0) {
+                  let message = messages.pop();
+                  append_to_message_container(message['role'], message['content']);
+                  rewrite_prompt(topic, serializedData);
+                }
+            },
+            error: function (response) {
+                enableGenerateBtn()
+                // alert the error if any error occured
+                alert(response["error"]);
+            }
+        })
+    });
+
+    function rewrite_prompt(topic, serializedData) {
+      $.ajax({
+          type: 'POST',
+          url: "{% url 'request_funny_prompt' %}",
+          data: serializedData,
+          beforeSend: function () {
+            let prompt = "rewrite this story in a funny way: " + topic;
+
+            append_to_message_container('user', prompt);
+          },
+          success: function (response) {
+              // on successfull creating object
+              let messages = response["messages"];
+              if (messages.length > 0) {
+                let message = messages.pop();
+                append_to_message_container(message['role'], message['content']);
+              }
+
+              enableGenerateBtn()
+          },
+          error: function (response) {
+              enableGenerateBtn()
+              // alert the error if any error occured
+              alert(response["error"]);
+          }
+      })
+    }
+
+    function append_to_message_container(role, content) {
+      let message_class_names = "card mb-2";
+      if (role === 'assistant') {
+        message_class_names += " bg-success text-white";
+      }
+      $("#chat-history").append(
+          '<div class="' + message_class_names + '">' +
+            '<div class="card-body p-2">' +
+              '<strong class="text-capitalize">' + role + ':</strong> ' +
+              content.split("\n").join("<br />") +
+            '</div>' +
+          '</div>'
+      );
+    }
+
+    function disableGenerateBtn() {
+      let generate_prompt_btn = $('#btn-generate-prompt');
+
+      generate_prompt_btn.addClass('disabled');
+
+      generate_prompt_btn.find('.generate_icon')
+        .removeClass("fa-solid fa-arrow-right")
+        .addClass("fas fa-spinner fa-pulse");
+    }
+
+    function enableGenerateBtn() {
+      let generate_prompt_btn = $('#btn-generate-prompt');
+
+      generate_prompt_btn.removeClass('disabled');
+
+      generate_prompt_btn.find('.generate_icon')
+        .removeClass("fas fa-spinner fa-pulse")
+        .addClass("fa-solid fa-arrow-right");
+    }
+
+</script>
+{% endblock javascript %}
